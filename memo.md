@@ -381,6 +381,115 @@ jobs:
       MONGODB_PASSWORD: ${{ secrets.MONOGODB_PASSWORD }}
 ```
 
+## `strategy`と`matrix`を使用した複数のセッティングのジョブの実行
+
+`matrix`を使用することで複数のセッティングのジョブを実行することができる.  
+使用方法については以下の例を参照.  
+`strategy.matrix`で定義した各キーを`matrix.xxx`で利用できる.  
+以下の例だと,`node-version`と`operating-system`の組み合わせが6通りあるので、6つのジョブが並行同時に実行される.  
+1つの組み合わせが失敗しても他のジョブが実行するようにするためにはジョブレベルで`continue-on-error`を`ture`に設定する必要がある.  
+
+また、追加したい組み合わせや、除外したい組み合わせについては、`matrix`配下のリザーブされたキーワード`include`,`exclude`を使用する.
+
+```yaml
+jobs:
+  build:
+    # 1つの組み合わせが失敗しても他のジョブが実行するようにするには`continue-on-error`を`true`に設定する.
+    continue-on-error: true
+    strategy:
+      matrix:
+        node-version: [12, 14, 16]
+        operating-system: [ubuntu-latest, windows-latest]
+        include:
+        - node-version: 18
+          operating-system: ubuntu-latest
+        exclude:
+        - node-version: 12
+          operating-system: windows-latest
+      run-on: ${{ matrix.operating-system }}
+      steps:
+      - name: Get Code
+        uses: actions/checkout@v3
+      - name: Install NodeJS
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install Dependencies
+        run: npm ci
+      - name: Build project
+        run: npm run build
+```
+
+## workflowの再利用
+
+再利用可能なworkflowは`on`で指定する起動するイベントとして`workflow_call`を指定することで作成可能.  
+引数は`inputs`で設定可能.  
+引き渡すシークレット情報は`secrets`で設定可能.  
+結果は、`outputs`で設定可能.
+
+./.github/workflows/reuseable.yaml
+
+```yaml
+name: Resusable Deploy
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: The name of the deployable artifact files
+        required: false
+        default: dist
+        type: string
+    secrets:
+      some-secret:
+        required: false
+    outputs:
+      result:
+        description: The result of the deployment operation
+        value: ${{  }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # ワークフロー呼び出し時に与えるシークレットは`${{ secrets.xxx }}`で使用できる.
+      SOME_SECRET_ENV: ${{ secrets.some-secret }}
+    outputs:
+      # このジョブの`outputs`の`outcome`
+      outcome: ${{ steps.set-result.outputs.step-result }}
+    steps:
+    - name: Get Code
+      uses: actions/download-artifact@v3
+      with:
+        # 入力値は`${{ input.xxx }}`でアクセス可能.
+        name: ${{ inputs.artifact-name }}
+    - name: Echo secret
+      run: echo $SOME_SECRET_ENV
+    - name: Output information
+      run: ls
+    - name: Set result output
+      id: set-result
+      # このステップのアウトプットとして`step-result`に`success`を設定.
+      run: echo "::set-output name=step-result::success"
+```
+
+また、呼び出し側は、ジョブレベルでの`uses`を使用する.  
+`with`で引数を指定.  
+`secrets`で引き渡すシークレット情報を指定.
+
+./.github/deploy.yaml
+
+```yaml
+jobs:
+  deploy:
+    # `uses`で呼び出すworkflowを指定する.
+    uses: ./.github/workflows/resusable.yaml
+    # 引数は`with`で与える.
+    with:
+      artifact-name: dist-files
+    # 引き渡すシークレット情報は`secrets`で与える.
+    secrets:
+      some-secret: ${{ secrets.xxx }}
+```
+
 環境に関する解説については[デプロイに環境を使用する](https://docs.github.com/ja/actions/deployment/targeting-different-environments/using-environments-for-deployment#creating-an-environment)を参照.
 
 [Events that trigger workflows]: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows

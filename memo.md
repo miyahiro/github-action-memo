@@ -73,7 +73,7 @@
         runs-on: ubuntu-latest
         steps:
     ```
-    
+
 - ファイルやフォルダをArtifactとしてアップロード、ダウンロード
 
     ファイルやフォルダをArtifactとしてアップロード、ダウンロードは以下のように設定することでできる.
@@ -104,7 +104,6 @@
 
     以下のように値を受け渡すことができる.  
     詳しくは、[ジョブの出力の定義]を参照.
-
 
     ```yaml
     jobs:
@@ -144,7 +143,7 @@
               path: ~/.npm
               key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
     ```
-    
+
 - `if`を使った実行制御
 
     `if`を使うことにより、ステップやジョブを実行するかどうかを制御できる.  
@@ -159,14 +158,14 @@
       if: steps.id-step0.outputs.output0 == 'hoge'
       run: echo id-step0 output 'hoge'
     ```
-    
+
     ```yaml
     jobs:
       production-deploy:
         if: github.repository == 'octo-org/octo-repo-prod'
         steps:
     ```
-    
+
 - 以前のいずれかのステップの実行結果によって実行するかどうかを決定する方法
 
     以前のいずれかのステップの実行結果によって実行するか銅貨を決定するには`if`とステータスチェック関数を用いる.  
@@ -174,7 +173,7 @@
     そうしないと、そのステップは実行されない.(デフォルトでは`success()`が`if`に追加された状態なので)  
     使用できるステータスチェック関数には`success(), always(), failure(), cancelled()`がある.  
     ステータスチェック関数については[ステータスチェック関数]を参照.
-    
+
     ```yaml
     - name: step name
       if: failure()
@@ -192,13 +191,13 @@
     - name: step name
       if: failure() && steps.prev.conclusion == 'failure'
     ```
-    
+
 - ジョブのレベルで実行するかどうかを決める
 
     ジョブのレベルで実行するかどうかを決めるにはステップレベルと同じく`if`と[ステータスチェック関数]を用いる.
-    
+
     以下に、例を示す.
-    
+
     ```yaml
     jobs:
       test:
@@ -240,14 +239,14 @@
       if: steps.cache.outputs.cache-hit != 'true'
       run: npm ci
     ```
-    
+
 - エラーが発生してもその後のステップを実行したい場合
 
     エラーが発生してもその後のステップを実行したい場合には`continue-on-error`を`true`に設定する.  
     `true`に設定するとステップが失敗しても強制的に成功にする.  
     ただし、`steps.<step_id>.outcome`は`continue-on-error`の設定値に依存しないので注意.  
     詳しくは[stepsコンテキスト]を参照.
-    
+
     ```yaml
     steps:
       - name: Test code
@@ -293,7 +292,7 @@
 - workflow_call
 
     他のワークフローから呼び出し
-    
+
 ### Activity Type
 
 それぞれのイベントについてさらに細分化したもの、それぞれのイベントに対して定義されている.  
@@ -492,8 +491,124 @@ jobs:
 
 環境に関する解説については[デプロイに環境を使用する](https://docs.github.com/ja/actions/deployment/targeting-different-environments/using-environments-for-deployment#creating-an-environment)を参照.
 
+## コンテナ内でジョブのステップを実行する
+
+ジョブを特定のコンテナで起動するには、`container`キーをジョブレベルで設定する.  
+設定できる項目については[コンテナ内でのジョブの実行](https://docs.github.com/ja/actions/using-jobs/running-jobs-in-a-container)を参照.
+
+```yaml
+jobs:
+  test:
+    environment: testing
+    runs-on: ubuntu-latest
+    container:
+      # Dockerイメージを指定
+      image: node:16
+      # 起動する際にコンテナに注入する環境変数を指定.
+      env:
+        key: value
+```
+
+## サービスコンテナ
+
+ジョブを実行する際に必要となる外部サービス（テストDBなど）を起動するためにサービスコンテナをジョブレベルの`services`を指定することで使用できる.  
+サービスコンテナへのアクセスは、`services`配下のキー名でアクセスできる.  
+詳しくは[サービスコンテナについて](https://docs.github.com/ja/actions/using-containerized-services/about-service-containers)を参照のこと.
+
+```yaml
+jobs:
+  test:
+    environment: testing
+    runs-on: ubuntu-latest
+    services:
+      # キー名(`mongodb`)という名前でTPアドレスへ変換できる.
+      mongodb:
+        # 起動するイメージを指定.
+        image: mongo
+        # コンテナに注入する環境変数を設定.
+        env:
+          MONGO_INIT_DB_ROOT_USER: root
+          MONGO_INIT_DB_ROOT_PASSWORD: example
+        # runnerのローカルIPでアクセスしたい場合、コンテナのポートマップ機能を衣装
+        ports:
+        - 27017:27017
+```
+
+## ローカルのカスタムCompositeアクションの定義と使用方法
+
+ローカルのカスタムCompositeアクションは、以下の名称で定義を格納する.  
+`.github/xxxx/yyyy/action.yaml`  
+ここで、`.github`と`action.yaml`は固定の名称.  
+
+カスタムのCompositeアクションは`action.yaml`は以下のように定義する.  
+詳しくは[複合アクションを作成する]を参照.
+
+```yaml
+name: 'Get & Cache Dependencies'
+description: 'Get the dependencies (via npm) and cache them.'
+# カスタムアクションの`with`で受け取る引数を指定する.
+impouts:
+  # `caching`という引数をカスタムアクションとして受け取る.
+  caching:
+    description: Whether to cache dependencies or not.
+    required: false
+    default: 'true'
+# カスタムアクションの結果を引き渡す.
+outputs:
+  # カスタムアクションの`outputs`として`used-cache`というキーの出力が得られる.
+  used-cache:
+    description: Whether the cache was used.
+    value: ${{ steps.install.outputs.caching }}
+# runsキーを使用する
+runs:
+  # カスタムのCompositeアクションであることを示すために以下の行が必要
+  using: 'composite'
+  # ジョブの中の`steps`と同じ記述ができる.
+  steps:
+  - name: Cache dependencies
+    # `inputs`の`caching`の値をしようする
+    if: inputs.caching
+    id: cache
+    uses: actions/cache@v3
+    with:
+      path: node_modeules
+      key: deps-node-modules-${{ hashFiles('**/package-lock.json') }}
+  - name: Install dependencies
+    id: install
+    if: steps.cache.output.cache-hit != 'true' || inputs.caching != 'true'
+    run: |
+      npm ci
+      echo "::set-output name=cache::'${{ inputs.caching }}'"
+    shell: bash
+```
+
+カスタムアクションを使う.
+
+```yaml
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get code
+      uses: actions/checkout@v3
+    - name: Load & cache dependencies
+      id: cache-deps
+      # リポジトリのルートから相対(./から始める)で`action.yaml`を含むフォルダを指定.
+      # こうすることでカスタムアクションを使用できる
+      uses: ./.github/xxxx/yyyy
+      # カスタムアクションのインプットを指定する.
+      with:
+        caching: 'false'
+    - name: Output information
+      # カスタムアクションの出力の`used-cache`キーの値を出力する.
+      run: echo "Cache used? ${{ steps.cache-deps.outputs.used-cache }}"
+    - name: Lint code
+      run: npm run lint
+```
+
 [Events that trigger workflows]: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows
 [ジョブの出力の定義]: https://docs.github.com/ja/actions/using-jobs/defining-outputs-for-jobs
 [Default environment variables]: https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables
 [ステータスチェック関数]: https://docs.github.com/ja/actions/learn-github-actions/expressions#status-check-functions
 [stepsコンテキスト]: https://docs.github.com/ja/actions/learn-github-actions/contexts#steps-context
+[複合アクションを作成する]: https://docs.github.com/ja/actions/creating-actions/creating-a-composite-action

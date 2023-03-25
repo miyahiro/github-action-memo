@@ -443,9 +443,10 @@ on:
       some-secret:
         required: false
     outputs:
+      # `deploy`ジョブの`outputs`で指定した`outcome`の値をこのworkflowの出力`result`として返す.
       result:
         description: The result of the deployment operation
-        value: ${{  }}
+        value: ${{ jobs.deploy.outputs.outcome }}
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -453,7 +454,7 @@ jobs:
       # ワークフロー呼び出し時に与えるシークレットは`${{ secrets.xxx }}`で使用できる.
       SOME_SECRET_ENV: ${{ secrets.some-secret }}
     outputs:
-      # このジョブの`outputs`の`outcome`
+      # このジョブのidが`set-result`ステップの`outputs`の`step-result`を、本ジョブの`outputs`の`outcome`として設定.
       outcome: ${{ steps.set-result.outputs.step-result }}
     steps:
     - name: Get Code
@@ -488,6 +489,13 @@ jobs:
     # 引き渡すシークレット情報は`secrets`で与える.
     secrets:
       some-secret: ${{ secrets.xxx }}
+  print-deploy-result:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Print deploy result
+      # `result`の部分は、`on.workflow_call.outputs`配下のキーを指定する.
+      run: ${{ needs.deploy.outputs.result }} 
 ```
 
 環境に関する解説については[デプロイに環境を使用する](https://docs.github.com/ja/actions/deployment/targeting-different-environments/using-environments-for-deployment#creating-an-environment)を参照.
